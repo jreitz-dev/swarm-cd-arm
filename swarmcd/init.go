@@ -97,8 +97,30 @@ func initStacks() error {
 		if !ok {
 			return fmt.Errorf("error initializing %s stack, no such repo: %s", stack, stackConfig.Repo)
 		}
+
+		// Resolve env file references
+		var envFiles []envFileRef
+		for _, ef := range stackConfig.EnvFiles {
+			efRepo := stackRepo
+			efBranch := stackConfig.Branch
+			if ef.Repo != "" {
+				efRepo, ok = repos[ef.Repo]
+				if !ok {
+					return fmt.Errorf("error initializing %s stack env file, no such repo: %s", stack, ef.Repo)
+				}
+			}
+			if ef.Branch != "" {
+				efBranch = ef.Branch
+			}
+			envFiles = append(envFiles, envFileRef{
+				repo:   efRepo,
+				branch: efBranch,
+				path:   ef.Path,
+			})
+		}
+
 		discoverSecrets := config.SopsSecretsDiscovery || stackConfig.SopsSecretsDiscovery
-		swarmStack := newSwarmStack(stack, stackRepo, stackConfig.Branch, stackConfig.ComposeFile, stackConfig.SopsFiles, stackConfig.ValuesFile, discoverSecrets)
+		swarmStack := newSwarmStack(stack, stackRepo, stackConfig.Branch, stackConfig.ComposeFile, stackConfig.SopsFiles, stackConfig.ValuesFile, envFiles, discoverSecrets)
 		stacks = append(stacks, swarmStack)
 		stackStatus[stack] = &StackStatus{}
 		stackStatus[stack].RepoURL = stackRepo.url
