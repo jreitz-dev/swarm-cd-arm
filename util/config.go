@@ -3,6 +3,8 @@ package util
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -33,11 +35,14 @@ type RepoConfig struct {
 type Config struct {
 	ReposPath            string                  `mapstructure:"repos_path"`
 	UpdateInterval       int                     `mapstructure:"update_interval"`
+	PollingEnabled       bool                    `mapstructure:"polling_enabled"`
 	AutoRotate           bool                    `mapstructure:"auto_rotate"`
 	StackConfigs         map[string]*StackConfig `mapstructure:"stacks"`
 	RepoConfigs          map[string]*RepoConfig  `mapstructure:"repos"`
 	SopsSecretsDiscovery bool                    `mapstructure:"sops_secrets_discovery"`
 	Address              string                  `mapstructure:"address"`
+	WebhookKey           string                  `mapstructure:"webhook_key"`
+	WebhookKeyFile       string                  `mapstructure:"webhook_key_file"`
 }
 
 var Configs Config
@@ -67,6 +72,7 @@ func readConfig() (err error) {
 	configViper.SetConfigName("config")
 	configViper.AddConfigPath(".")
 	configViper.SetDefault("update_interval", 120)
+	configViper.SetDefault("polling_enabled", true)
 	configViper.SetDefault("repos_path", "repos")
 	configViper.SetDefault("auto_rotate", true)
 	configViper.SetDefault("sops_secrets_discovery", false)
@@ -98,4 +104,26 @@ func readStackConfigs() (err error) {
 		return
 	}
 	return stacksViper.Unmarshal(&Configs.StackConfigs)
+}
+
+// GetWebhookKey returns the webhook key from config, file, or environment variable.
+// Priority: WEBHOOK_KEY env var > webhook_key_file > webhook_key config
+func GetWebhookKey() string {
+	// Check environment variable first
+	if envKey := os.Getenv("WEBHOOK_KEY"); envKey != "" {
+		return envKey
+	}
+
+	// Check file path (supports Docker secrets)
+	if Configs.WebhookKeyFile != "" {
+		keyBytes, err := os.ReadFile(Configs.WebhookKeyFile)
+		if err != nil {
+			Logger.Error("could not read webhook key file", "file", Configs.WebhookKeyFile, "error", err)
+			return ""
+		}
+		return strings.TrimSpace(string(keyBytes))
+	}
+
+	// Fall back to config value
+	return Configs.WebhookKey
 }

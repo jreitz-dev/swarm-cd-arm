@@ -11,7 +11,8 @@ SwarmCD watches your Git repositories for changes and automatically deploys and 
 ## Features
 
 - **GitOps workflow** — define your stacks in Git; SwarmCD continuously reconciles the cluster to match.
-- **Automatic sync** — polls repositories on a configurable interval and deploys changes hands-free.
+- **Automatic sync** — polls repositories on a configurable interval and deploys changes hands-free, or disable polling to use webhooks exclusively.
+- **Webhook support** — trigger stack deployments on-demand via HTTP webhook, ideal for CI/CD pipelines and instant deployments.
 - **SOPS secret management** — decrypt [SOPS](https://github.com/getsops/sops)-encrypted files (age, GPG, AWS KMS, GCP KMS, Azure Key Vault, HashiCorp Vault) before every deploy.
 - **Automatic secret discovery** — optionally auto-detect `secrets:` entries in your Compose file so you don't have to list them manually.
 - **Config & secret rotation** — automatically appends a content hash to Swarm config/secret names so services pick up changes without manual intervention.
@@ -82,6 +83,7 @@ SwarmCD will clone your repo, deploy the `nginx` stack, and keep it in sync on e
 |---|---|
 | [Getting Started](docs/getting-started.md) | Step-by-step first deployment walkthrough |
 | [Configuration Reference](docs/configuration.md) | Every option for `config.yaml`, `repos.yaml`, and `stacks.yaml` |
+| [Webhook](docs/webhook.md) | Trigger deployments on-demand via HTTP webhook |
 | [Secrets Management](docs/secrets.md) | Using SOPS to encrypt and auto-decrypt secrets |
 | [Templating & Env Files](docs/templating.md) | Go template rendering, values files, and `.env` substitution |
 | [Deployment Patterns](docs/deployment.md) | Remote Docker sockets, private registries, socket proxies |
@@ -107,6 +109,7 @@ SwarmCD reads up to three configuration files from its working directory (`/app`
 
 ```yaml
 update_interval: 60        # seconds between sync cycles (default: 120)
+polling_enabled: true       # set to false to disable polling and use webhooks only
 address: 0.0.0.0:8080      # web UI / API listen address
 auto_rotate: true           # hash-rename configs & secrets for rotation
 sops_secrets_discovery: false

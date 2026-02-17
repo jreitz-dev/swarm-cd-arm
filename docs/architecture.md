@@ -36,8 +36,8 @@ This document describes how SwarmCD is structured internally, how the sync lifec
 
 SwarmCD is a single Go binary that runs as a Docker Swarm service. It performs three roles simultaneously:
 
-1. **GitOps controller** — clones Git repositories, polls them for changes on a configurable interval, and deploys Docker Swarm stacks using `docker stack deploy`.
-2. **Web API server** — serves a `GET /stacks` JSON endpoint that returns the current status of all managed stacks.
+1. **GitOps controller** — clones Git repositories, polls them for changes on a configurable interval (or responds to webhook triggers), and deploys Docker Swarm stacks using `docker stack deploy`.
+2. **Web API server** — serves a `GET /stacks` JSON endpoint that returns the current status of all managed stacks, and a `POST /webhook` endpoint for triggering deployments on-demand.
 3. **Web UI host** — serves a static React single-page application that visualizes stack status by consuming the API.
 
 ```
@@ -379,16 +379,29 @@ Cross-repo env files add a wrinkle: if a stack's env file references a different
 
 ### Polling vs. Webhooks
 
-SwarmCD uses a **polling** model rather than webhooks. On every sync cycle, it pulls every repo regardless of whether changes occurred. This design choice has trade-offs:
+SwarmCD supports both **polling** and **webhook-triggered** deployment models. You can use them together or disable polling entirely to rely exclusively on webhooks.
 
-| | Polling | Webhooks |
-|---|---|---|
-| **Simplicity** | No incoming network configuration needed | Requires public endpoint, secret management |
-| **Reliability** | Self-healing — missed changes are caught on the next cycle | Missed webhooks require retry logic |
-| **Latency** | Bounded by `update_interval` (default 120s) | Near-instant |
-| **Efficiency** | Pulls even when nothing changed | Only triggers on actual changes |
+**Polling mode** (enabled by default):
+- Polls repositories on every sync cycle regardless of whether changes occurred
+- No incoming network configuration needed
+- Self-healing — missed changes are caught on the next cycle
+- Latency bounded by `update_interval` (default: 120 seconds)
+- Simple and reliable for small-to-medium deployments
 
-For the typical Docker Swarm use case (small-to-medium deployments), polling is simple, reliable, and good enough.
+**Webhook mode**:
+- Trigger deployments on-demand via `POST /webhook` endpoint
+- Near-instant deployments after Git pushes
+- Requires authentication via webhook key
+- Can update all stacks or a specific stack
+- Ideal for CI/CD pipelines
+
+**Webhook-only mode** (set `polling_enabled: false`):
+- Completely disables the polling loop
+- All deployments must be triggered via webhook
+- Reduces unnecessary Git operations
+- The `update_interval` setting is ignored
+
+For the typical Docker Swarm use case, polling is simple and good enough. For faster deployments or webhook-driven workflows, you can use webhooks exclusively or combine both approaches.
 
 ### In-Place Decryption
 
@@ -425,6 +438,7 @@ The configuration loading order is important to understand:
 1. config.yaml is read (if present)
    └── All fields get defaults if not specified:
        • update_interval: 120
+       • polling_enabled: true
        • repos_path: "repos"
        • auto_rotate: true
        • sops_secrets_discovery: false
