@@ -9,13 +9,20 @@ import (
 	"github.com/spf13/viper"
 )
 
+type EnvFileConfig struct {
+	Path   string
+	Repo   string
+	Branch string
+}
+
 type StackConfig struct {
 	Repo                 string
 	Branch               string
-	ComposeFile          string   `mapstructure:"compose_file"`
-	ValuesFile           string   `mapstructure:"values_file"`
-	SopsFiles            []string `mapstructure:"sops_files"`
-	SopsSecretsDiscovery bool     `mapstructure:"sops_secrets_discovery"`
+	ComposeFile          string          `mapstructure:"compose_file"`
+	ValuesFile           string          `mapstructure:"values_file"`
+	EnvFiles             []EnvFileConfig `mapstructure:"env_files"`
+	SopsFiles            []string        `mapstructure:"sops_files"`
+	SopsSecretsDiscovery bool            `mapstructure:"sops_secrets_discovery"`
 }
 
 type RepoConfig struct {

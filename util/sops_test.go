@@ -21,6 +21,13 @@ func TestGetFileFormat(t *testing.T) {
 			want: "yaml",
 		},
 		{
+			name: "yml",
+			args: args{
+				filename: "/path/to/test.yml",
+			},
+			want: "yaml",
+		},
+		{
 			name: "json",
 			args: args{
 				filename: "/path/to/test.json",
@@ -49,11 +56,39 @@ func TestGetFileFormat(t *testing.T) {
 			want: "dotenv",
 		},
 		{
+			name: "dotenv with prefix",
+			args: args{
+				filename: "/path/to/.env.production",
+			},
+			want: "binary",
+		},
+		{
 			name: "binary",
 			args: args{
 				filename: "/path/to/test.whatever",
 			},
 			want: "binary",
+		},
+		{
+			name: "no extension",
+			args: args{
+				filename: "/path/to/secretfile",
+			},
+			want: "binary",
+		},
+		{
+			name: "nested yaml",
+			args: args{
+				filename: "/a/b/c/deep/secret.yaml",
+			},
+			want: "yaml",
+		},
+		{
+			name: "nested yml",
+			args: args{
+				filename: "/a/b/c/deep/secret.yml",
+			},
+			want: "yaml",
 		},
 	}
 	for _, tt := range tests {

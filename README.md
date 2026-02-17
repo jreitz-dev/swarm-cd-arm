@@ -1,353 +1,60 @@
 # SwarmCD
 
-A declarative GitOps and Continuous Deployment tool for Docker Swarm.
+**Declarative GitOps & Continuous Deployment for Docker Swarm**
 
-Inspired by [ArgoCD](https://argo-cd.readthedocs.io/en/stable/).
+SwarmCD watches your Git repositories for changes and automatically deploys and updates Docker Swarm stacks — no manual `docker stack deploy` required. Inspired by [ArgoCD](https://argo-cd.readthedocs.io/en/stable/), but purpose-built for Swarm.
 
 ![SwarmCD UI](assets/ui.png)
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Configuration Reference](#configuration-reference)
-  - [config.yaml](#configyaml)
-  - [repos.yaml](#reposyaml)
-  - [stacks.yaml](#stacksyaml)
-- [Features](#features)
-  - [SOPS Secrets Management](#sops-secrets-management)
-  - [Go Template Support](#go-template-support)
-  - [Auto-Rotate Configs and Secrets](#auto-rotate-configs-and-secrets)
-  - [Webhook Integration](#webhook-integration)
-- [Advanced Configuration](#advanced-configuration)
-  - [Remote Docker Socket](#remote-docker-socket)
-  - [Private Container Registries](#private-container-registries)
-- [Web UI](#web-ui)
-- [Quick Reference](#quick-reference)
-
----
-
-## Overview
-
-SwarmCD bridges the gap between GitOps practices and Docker Swarm deployments. Define your infrastructure as code in Git repositories, and SwarmCD will:
-
-- **Poll** your repositories at configurable intervals
-- **Detect** changes in your stack definitions
-- **Deploy** updates automatically to your Docker Swarm cluster
-- **Decrypt** SOPS-encrypted secrets before deployment
-- **Report** status through a built-in Web UI
-
----
-
-## Quick Start
-
-In this example, we use SwarmCD to deploy the stack in the repo
-[swarm-cd-example](https://github.com/m-adawi/swarm-cd-example) to a Docker Swarm cluster.
-
-**1. Add the repo to `repos.yaml`:**
-
-```yaml
-# repos.yaml
-swarm-cd-example:
-  url: "https://github.com/m-adawi/swarm-cd-example.git"
-```
-
-**2. Define the stack in `stacks.yaml`:**
-
-```yaml
-# stacks.yaml
-nginx:
-  repo: swarm-cd-example
-  branch: main
-  compose_file: nginx/compose.yaml
-```
-
-**3. Deploy SwarmCD to the cluster:**
-
-```yaml
-# docker-compose.yaml
-version: '3.7'
-services:
-  swarm-cd:
-    image: ghcr.io/m-adawi/swarm-cd:latest
-    deploy:
-      placement:
-        constraints:
-          - node.role == manager
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./repos.yaml:/app/repos.yaml:ro
-      - ./stacks.yaml:/app/stacks.yaml:ro
-```
-
-**4. Run on a swarm manager node:**
-
-```bash
-docker stack deploy --compose-file docker-compose.yaml swarm-cd
-```
-
-SwarmCD will now periodically check the stack repo for changes, pull them, and update the stack automatically.
-
----
-
-## Configuration Reference
-
-SwarmCD uses three main configuration files. You can either use separate files or consolidate everything into `config.yaml`.
-
-### config.yaml
-
-The main configuration file for SwarmCD behavior and global settings.
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `update_interval` | integer | `120` | Polling interval in seconds — how often SwarmCD checks repositories for changes |
-| `repos_path` | string | `repos/` | Local filesystem path where repositories are cloned |
-| `address` | string | `0.0.0.0:8080` | Address and port for the Web UI |
-| `auto_rotate` | boolean | `false` | Automatically rotate Docker configs and secrets when they change (adds content hash to names) |
-| `sops_secrets_discovery` | boolean | `false` | Globally enable automatic detection of SOPS-encrypted files |
-| `repos` | object | — | Inline repository definitions (alternative to `repos.yaml`) |
-| `stacks` | object | — | Inline stack definitions (alternative to `stacks.yaml`) |
-| `webhook_key` | string | — | Secret key for webhook authentication (not recommended for production) |
-| `webhook_key_file` | string | — | Path to file containing webhook key (recommended for Docker secrets) |
-
-**Example:**
-
-```yaml
-update_interval: 300
-repos_path: /data/repos/
-address: 0.0.0.0:8080
-auto_rotate: true
-sops_secrets_discovery: true
-webhook_key_file: /run/secrets/webhook_key
-```
-
-> **Note:** The webhook key can also be set via the `WEBHOOK_KEY` environment variable. Priority order: `WEBHOOK_KEY` env var > `webhook_key_file` > `webhook_key`
-
----
-
-### repos.yaml
-
-Defines the Git repositories containing your stack definitions.
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `url` | string | **Yes** | Git repository URL |
-| `username` | string | No | Username for authentication (required if using password) |
-| `password` | string | No | Password or personal access token |
-| `password_file` | string | No | Path to file containing password (recommended for Docker secrets) |
-
-**Example:**
-
-```yaml
-# Public repository — no authentication needed
-my-public-repo:
-  url: "https://github.com/myorg/public-stacks.git"
-
-# Private repository with inline credentials
-my-private-repo:
-  url: "https://github.com/myorg/private-stacks.git"
-  username: deploy-user
-  password: ghp_xxxxxxxxxxxxxxxxxxxx
-
-# Private repository with file-based credentials (recommended)
-production-repo:
-  url: "https://github.com/myorg/production.git"
-  username: deploy-user
-  password_file: /run/secrets/github_token
-```
-
-> **Security Tip:** Always use `password_file` with Docker secrets in production environments rather than inline passwords.
-
----
-
-### stacks.yaml
-
-Defines the Docker Swarm stacks that SwarmCD manages.
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `repo` | string | **Yes** | Name of the repository (must match a key in `repos.yaml`) |
-| `branch` | string | **Yes** | Git branch to track |
-| `compose_file` | string | **Yes** | Path to the Docker Compose file within the repository |
-| `values_file` | string | No | Path to values file for Go template rendering |
-| `sops_files` | list | No | List of SOPS-encrypted file paths to decrypt before deployment |
-| `sops_secrets_discovery` | boolean | No | Enable automatic SOPS file detection for this stack |
-
-**Example:**
-
-```yaml
-# Basic stack
-nginx:
-  repo: my-public-repo
-  branch: main
-  compose_file: nginx/compose.yaml
-
-# Stack with Go template values
-webapp:
-  repo: production-repo
-  branch: main
-  compose_file: webapp/compose.yaml
-  values_file: webapp/values-prod.yaml
-
-# Stack with explicit SOPS-encrypted secrets
-webapp-ssl:
-  repo: production-repo
-  branch: main
-  compose_file: webapp-ssl/compose.yaml
-  sops_files:
-    - webapp-ssl/secrets/tls.crt
-    - webapp-ssl/secrets/tls.key
-
-# Stack with automatic SOPS discovery
-microservice:
-  repo: production-repo
-  branch: main
-  compose_file: microservice/compose.yaml
-  sops_secrets_discovery: true
-```
 
 ---
 
 ## Features
 
-### SOPS Secrets Management
+- **GitOps workflow** — define your stacks in Git; SwarmCD continuously reconciles the cluster to match.
+- **Automatic sync** — polls repositories on a configurable interval and deploys changes hands-free.
+- **SOPS secret management** — decrypt [SOPS](https://github.com/getsops/sops)-encrypted files (age, GPG, AWS KMS, GCP KMS, Azure Key Vault, HashiCorp Vault) before every deploy.
+- **Automatic secret discovery** — optionally auto-detect `secrets:` entries in your Compose file so you don't have to list them manually.
+- **Config & secret rotation** — automatically appends a content hash to Swarm config/secret names so services pick up changes without manual intervention.
+- **Compose templating** — render your Compose files as Go templates with a separate `values.yaml`, or use `.env` file variable substitution with full docker-compose syntax (`${VAR}`, `${VAR:-default}`, `$$`).
+- **Multi-repo support** — pull stacks, env files, and values from different repositories and branches.
+- **Private repo auth** — authenticate with username/password or token files (ideal for Docker secrets).
+- **Private registry auth** — pass Docker registry credentials via `~/.docker/config.json`.
+- **Remote Docker hosts** — connect to remote or proxied Docker sockets via `DOCKER_HOST`.
+- **Web UI** — lightweight React dashboard showing every stack's sync status, revision, and errors.
+- **REST API** — `GET /stacks` returns JSON status for all managed stacks.
+- **Multi-arch images** — published for `linux/amd64` and `linux/arm64`.
 
-SwarmCD integrates with [SOPS](https://github.com/getsops/sops) to decrypt encrypted files before deployment. This allows you to safely store secrets in Git.
+---
 
-**Supported backends:**
-- **age** — Set `SOPS_AGE_KEY_FILE` to the path of your age key file
-- **GPG** — Set `SOPS_GPG_PRIVATE_KEY_FILE` to the path of your GPG private key, or `SOPS_GPG_PRIVATE_KEY` with the key content directly
+## Quick Start
 
-**Two approaches for specifying secrets:**
+### 1. Define your repositories
 
-1. **Explicit list** — Use `sops_files` in your stack definition
-2. **Automatic discovery** — Enable `sops_secrets_discovery` to automatically detect and decrypt SOPS files
-
-**Example with age encryption:**
+Create a `repos.yaml` file listing the Git repos that contain your stack Compose files:
 
 ```yaml
-version: '3.7'
-services:
-  swarm-cd:
-    image: ghcr.io/m-adawi/swarm-cd:latest
-    deploy:
-      placement:
-        constraints:
-          - node.role == manager
-    secrets:
-      - source: age
-        target: /secrets/age.key
-    environment:
-      - SOPS_AGE_KEY_FILE=/secrets/age.key
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./repos.yaml:/app/repos.yaml:ro
-      - ./stacks.yaml:/app/stacks.yaml:ro
-secrets:
-  age:
-    file: age.key
+# repos.yaml
+my-stacks:
+  url: "https://github.com/you/my-stacks.git"
 ```
 
-> **Note:** When `sops_secrets_discovery` is enabled globally in `config.yaml`, it takes precedence over individual stack settings. When enabled at the stack level, it ignores `sops_files`.
+### 2. Define your stacks
 
----
-
-### Go Template Support
-
-Compose files can be treated as Go templates when a `values_file` is specified. This enables dynamic configuration based on environment-specific values.
-
----
-
-### Auto-Rotate Configs and Secrets
-
-When `auto_rotate: true` is set, SwarmCD automatically appends a content hash to Docker config and secret names. This ensures services are restarted when configuration changes, as Docker Swarm doesn't natively support config/secret updates.
-
----
-
-### Webhook Integration
-
-Trigger immediate stack updates instead of waiting for the polling interval. Useful for CI/CD integration.
-
-See [docs/webhook.md](docs/webhook.md) for detailed webhook configuration and usage.
-
----
-
-## Advanced Configuration
-
-### Remote Docker Socket
-
-You can use the `DOCKER_HOST` environment variable to point SwarmCD to a remote Docker socket, be it in the same swarm or a different host.
-
-**Example with docker-socket-proxy:**
+Create a `stacks.yaml` file declaring which stacks to deploy:
 
 ```yaml
-version: '3.7'
-
-services:
-  socket_proxy:
-    image: tecnativa/docker-socket-proxy:0.2.0
-    deploy:
-      placement:
-        constraints: 
-          - node.role == manager
-    volumes: 
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      TZ: Europe/Rome
-      INFO: 1
-      SERVICES: 1
-      NETWORKS: 1
-      SECRETS: 1
-      CONFIGS: 1
-      POST: 1
-
-  swarm-cd:
-    image: ghcr.io/m-adawi/swarm-cd:latest
-    environment:
-      DOCKER_HOST: tcp://socket_proxy:2375
-    configs:
-      - source: stacks
-        target: /app/stacks.yaml
-        mode: 0400
-      - source: repos
-        target: /app/repos.yaml
-        mode: 0400
-
-configs:
-  stacks:
-    file: ./stacks.yaml
-  repos:
-    file: ./repos.yaml
+# stacks.yaml
+nginx:
+  repo: my-stacks
+  branch: main
+  compose_file: nginx/compose.yaml
 ```
 
----
-
-### Private Container Registries
-
-You can pass authentication to private container registries via the `~/.docker/config.json` file.
-
-**1. Encode your credentials with base64:**
-
-```shell
-printf 'username:password' | base64
-```
-
-**2. Create the docker config file:**
-
-```json
-{
-    "auths": {
-        "my.registry.example": {
-            "auth": "(base64 output here)"
-        }
-    }
-}
-```
-
-**3. Mount as a Docker secret:**
+### 3. Deploy SwarmCD
 
 ```yaml
-version: '3.7'
+# docker-compose.yaml
+version: "3.7"
 services:
   swarm-cd:
     image: ghcr.io/m-adawi/swarm-cd:latest
@@ -359,53 +66,113 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./repos.yaml:/app/repos.yaml:ro
       - ./stacks.yaml:/app/stacks.yaml:ro
-    secrets:
-      - source: docker-config
-        target: /root/.docker/config.json
-secrets:
-  docker-config:
-    file: docker-config.json
 ```
 
-> **Note:** If running SwarmCD as a user other than root, modify the docker config mount path to match.
+```bash
+docker stack deploy -c docker-compose.yaml swarm-cd
+```
 
----
-
-## Web UI
-
-SwarmCD includes a built-in web dashboard accessible at the configured `address` (default: `http://localhost:8080`).
-
-**Features:**
-- View all managed stacks at a glance
-- See current Git revision for each stack
-- Monitor stack health and error states
-- Search and filter stacks
-- Dark mode support
-
----
-
-## Quick Reference
-
-| File | Purpose |
-|------|---------|
-| `config.yaml` | Global settings, intervals, feature flags |
-| `repos.yaml` | Git repository definitions and credentials |
-| `stacks.yaml` | Stack definitions mapping to compose files |
-
-| Environment Variable | Purpose |
-|---------------------|---------|
-| `DOCKER_HOST` | Connect to a remote Docker socket |
-| `WEBHOOK_KEY` | Webhook authentication key |
-| `SOPS_AGE_KEY_FILE` | Path to age key for SOPS decryption |
-| `SOPS_GPG_PRIVATE_KEY_FILE` | Path to GPG key for SOPS decryption |
-| `SOPS_GPG_PRIVATE_KEY` | GPG private key content for SOPS |
+SwarmCD will clone your repo, deploy the `nginx` stack, and keep it in sync on every polling interval (default: **120 seconds**). Open `http://<manager-ip>:8080` to view the dashboard.
 
 ---
 
 ## Documentation
 
-Additional documentation:
-- [docs/webhook.md](docs/webhook.md) — Webhook configuration and CI/CD integration
-- [docs/config.yaml](docs/config.yaml) — Annotated config file reference
-- [docs/repos.yaml](docs/repos.yaml) — Annotated repos file reference
-- [docs/stacks.yaml](docs/stacks.yaml) — Annotated stacks file reference
+| Document | Description |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Step-by-step first deployment walkthrough |
+| [Configuration Reference](docs/configuration.md) | Every option for `config.yaml`, `repos.yaml`, and `stacks.yaml` |
+| [Secrets Management](docs/secrets.md) | Using SOPS to encrypt and auto-decrypt secrets |
+| [Templating & Env Files](docs/templating.md) | Go template rendering, values files, and `.env` substitution |
+| [Deployment Patterns](docs/deployment.md) | Remote Docker sockets, private registries, socket proxies |
+| [Architecture](docs/architecture.md) | How SwarmCD works under the hood |
+| [REST API](docs/api.md) | API endpoint reference |
+| [Contributing](docs/contributing.md) | Development setup, testing, and release process |
+
+---
+
+## Configuration at a Glance
+
+SwarmCD reads up to three configuration files from its working directory (`/app` in the container):
+
+| File | Required | Purpose |
+|---|---|---|
+| `repos.yaml` | Yes* | Git repository definitions |
+| `stacks.yaml` | Yes* | Stack definitions (what to deploy) |
+| `config.yaml` | No | Global settings (interval, address, feature flags) |
+
+*Repos and stacks can alternatively be defined inside `config.yaml` under the `repos:` and `stacks:` keys.
+
+### Minimal `config.yaml` example
+
+```yaml
+update_interval: 60        # seconds between sync cycles (default: 120)
+address: 0.0.0.0:8080      # web UI / API listen address
+auto_rotate: true           # hash-rename configs & secrets for rotation
+sops_secrets_discovery: false
+```
+
+See the full [Configuration Reference](docs/configuration.md) for all options.
+
+---
+
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `DOCKER_HOST` | Connect to a remote Docker daemon (e.g. `tcp://socket-proxy:2375`) |
+| `LOG_LEVEL` | Log verbosity: `debug`, `info` (default), `warn`, `error` |
+| `SOPS_AGE_KEY_FILE` | Path to an [age](https://github.com/FiloSottile/age) private key for SOPS decryption |
+| `SOPS_GPG_PRIVATE_KEY_FILE` | Path to a GPG private key file (imported automatically at startup) |
+| `SOPS_GPG_PRIVATE_KEY` | GPG private key provided directly as an environment variable |
+| `GIN_MODE` | Set to `release` in the published image; override to `debug` for verbose HTTP logging |
+
+---
+
+## Example: Full Production Setup
+
+```yaml
+version: "3.7"
+services:
+  swarm-cd:
+    image: ghcr.io/m-adawi/swarm-cd:latest
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    environment:
+      LOG_LEVEL: info
+      SOPS_AGE_KEY_FILE: /secrets/age.key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./repos.yaml:/app/repos.yaml:ro
+      - ./stacks.yaml:/app/stacks.yaml:ro
+      - ./config.yaml:/app/config.yaml:ro
+    secrets:
+      - source: age-key
+        target: /secrets/age.key
+      - source: docker-config
+        target: /root/.docker/config.json
+    ports:
+      - "8080:8080"
+
+secrets:
+  age-key:
+    file: ./age.key
+  docker-config:
+    file: ./docker-config.json
+```
+
+---
+
+## License
+
+SwarmCD is licensed under the [GNU General Public License v3.0](LICENSE).
+
+---
+
+## Acknowledgments
+
+- Inspired by [ArgoCD](https://argo-cd.readthedocs.io/en/stable/)
+- Secrets encryption powered by [SOPS](https://github.com/getsops/sops)
+- Example stacks: [swarm-cd-example](https://github.com/m-adawi/swarm-cd-example)
