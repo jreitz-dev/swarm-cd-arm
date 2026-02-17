@@ -1,27 +1,44 @@
-# SwarmCD stacks configuration refernce 
+# SwarmCD stacks configuration refernce
 # This file should contain all the stacks
-# that you want swarm-cd to keep synching 
+# that you want swarm-cd to keep synching
 
-# Name of the stack, it will be used in 
+# Name of the stack, it will be used in
 # the stack deploy command as the stack name
 stack-name:
-  # The repo that contain the stack compose file
-  # and other config files
-  repo: repo-name
-  # The repo branch to checkout from the stack repo
-  # before deploying or updating stack
-  branch: main
-  # The path to the docker compose file where stack
-  # is defined
-  compose_file: /path/to/compose.yaml
-  # Path to values file to use when rendering
-  # compose file as a Go template. If empty, compose
-  # file will be treated as a regular compose file 
-  values_file: /path/to/values.yaml
-  # Paths to files encrypted using sops to decrypt
-  # before updating stack
-  sops_files:
-    - path/to/sops/encrypted/file
-  # Enable the automatic secret discovery
-  # alternative to sops_files
-  sops_secrets_discovery: false
+    # The repo that contain the stack compose file
+    # and other config files
+    repo: repo-name
+    # The repo branch to checkout from the stack repo
+    # before deploying or updating stack
+    branch: main
+    # The path to the docker compose file where stack
+    # is defined
+    compose_file: /path/to/compose.yaml
+    # Path to values file to use when rendering
+    # compose file as a Go template. If empty, compose
+    # file will be treated as a regular compose file
+    values_file: /path/to/values.yaml
+    # List of .env files to load for ${VAR} substitution
+    # in the compose file. Files are loaded in order, with
+    # later files overriding earlier ones.
+    # Supports standard docker-compose variable syntax:
+    #   ${VAR}           - substitute value, empty if unset
+    #   ${VAR:-default}  - use default if unset or empty
+    #   ${VAR-default}   - use default if unset
+    #   $$               - literal dollar sign
+    env_files:
+        # Path relative to the stack's own repo (repo defaults
+        # to the stack repo, branch defaults to the stack branch)
+        - path: /path/to/defaults.env
+        # Path from a different repo (e.g. your hosting/infra repo).
+        # The repo must be defined in repos.yaml.
+        - path: /envs/prod/my-app.env
+          repo: my-hosting-repo
+          branch: main
+    # Paths to files encrypted using sops to decrypt
+    # before updating stack
+    sops_files:
+        - path/to/sops/encrypted/file
+    # Enable the automatic secret discovery
+    # alternative to sops_files
+    sops_secrets_discovery: false
