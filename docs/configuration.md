@@ -16,6 +16,7 @@ SwarmCD reads up to three YAML configuration files from its working directory (`
 
 - [config.yaml](#configyaml)
   - [update\_interval](#update_interval)
+  - [polling\_enabled](#polling_enabled)
   - [repos\_path](#repos_path)
   - [auto\_rotate](#auto_rotate)
   - [sops\_secrets\_discovery](#sops_secrets_discovery)
@@ -49,6 +50,11 @@ Global settings that control SwarmCD's behavior. Every field is optional — sen
 # How often (in seconds) SwarmCD pulls repos and reconciles stacks.
 # Default: 120
 update_interval: 120
+
+# Enable or disable automatic polling.
+# When disabled, SwarmCD will only update stacks via webhook.
+# Default: true
+polling_enabled: true
 
 # Local directory where SwarmCD clones Git repositories.
 # Default: "repos"
@@ -95,7 +101,15 @@ stacks:
 |---|---|
 | **Type** | Integer (seconds) |
 | **Default** | `120` |
-| **Description** | Number of seconds SwarmCD waits between sync cycles. Each cycle pulls every repo and redeploys every stack. Lower values give faster convergence; higher values reduce Git and Docker API load. |
+| **Description** | Number of seconds SwarmCD waits between sync cycles. Each cycle pulls every repo and redeploys every stack. Lower values give faster convergence; higher values reduce Git and Docker API load. Ignored when `polling_enabled` is `false`. |
+
+#### polling_enabled
+
+| | |
+|---|---|
+| **Type** | Boolean |
+| **Default** | `true` |
+| **Description** | Controls whether SwarmCD automatically polls repositories on the `update_interval`. When set to `false`, the polling loop is completely disabled and stack updates will only occur via the webhook endpoint. This is useful when you want to rely exclusively on webhook-triggered deployments from CI/CD pipelines or Git hosting platforms. |
 
 #### repos_path
 
@@ -481,3 +495,31 @@ update_interval: 90
 auto_rotate: true
 address: 0.0.0.0:8080
 ```
+
+### Webhook-only configuration (polling disabled)
+
+```yaml
+# repos.yaml
+app-repo:
+  url: "https://github.com/you/app.git"
+  username: ci-bot
+  password_file: /run/secrets/github-token
+```
+
+```yaml
+# stacks.yaml
+app:
+  repo: app-repo
+  branch: production
+  compose_file: deploy/compose.yaml
+```
+
+```yaml
+# config.yaml
+polling_enabled: false
+webhook_key_file: /run/secrets/webhook_key
+address: 0.0.0.0:8080
+auto_rotate: true
+```
+
+In this configuration, SwarmCD will only deploy when triggered via the webhook endpoint. The polling loop is completely disabled, and all deployments must be initiated by your CI/CD pipeline or Git hosting platform.

@@ -2,6 +2,21 @@
 
 SwarmCD provides a webhook endpoint that allows you to trigger stack updates on-demand, instead of waiting for the polling interval. This is useful for CI/CD pipelines where you want to deploy immediately after pushing changes.
 
+## Disabling Polling
+
+If you want to rely exclusively on webhooks for deployments (and disable the automatic polling loop), you can set `polling_enabled: false` in your `config.yaml`:
+
+```yaml
+polling_enabled: false
+webhook_key_file: /run/secrets/webhook_key
+```
+
+When polling is disabled:
+- SwarmCD will not automatically pull repositories or deploy stacks on a schedule
+- All deployments must be triggered via the webhook endpoint
+- This reduces unnecessary Git operations and is ideal for webhook-driven workflows
+- The `update_interval` setting is ignored
+
 ## Configuration
 
 The webhook requires authentication using a secret key. You can configure the key using one of the following methods (in priority order):

@@ -4,6 +4,11 @@
 # waits everytime before pulling
 update_interval: 120
 
+# Enable or disable automatic polling.
+# When disabled, SwarmCD will only update stacks via webhook.
+# Default: true
+polling_enabled: true
+
 # The path where SwarmCD will checkout repos
 repos_path: repos/
 
