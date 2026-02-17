@@ -12,7 +12,13 @@ var stackStatus map[string]*StackStatus = map[string]*StackStatus{}
 var stacks []*swarmStack
 
 func Run() {
-	logger.Info("starting SwarmCD")
+	if !config.PollingEnabled {
+		logger.Info("polling is disabled - SwarmCD will only update stacks via webhook")
+		// Block forever since webhooks will handle updates
+		select {}
+	}
+
+	logger.Info("starting SwarmCD polling loop")
 	for {
 		var waitGroup sync.WaitGroup
 		logger.Info("updating stacks...")

@@ -27,6 +27,9 @@ func TestReadConfig_Defaults(t *testing.T) {
 	if Configs.UpdateInterval != 120 {
 		t.Errorf("expected default UpdateInterval=120, got %d", Configs.UpdateInterval)
 	}
+	if Configs.PollingEnabled != true {
+		t.Errorf("expected default PollingEnabled=true, got %v", Configs.PollingEnabled)
+	}
 	if Configs.ReposPath != "repos" {
 		t.Errorf("expected default ReposPath='repos', got %q", Configs.ReposPath)
 	}
@@ -52,6 +55,7 @@ func TestReadConfig_FromFile(t *testing.T) {
 
 	configContent := `
 update_interval: 60
+polling_enabled: false
 repos_path: /custom/repos
 auto_rotate: false
 sops_secrets_discovery: true
@@ -68,6 +72,9 @@ address: "127.0.0.1:9090"
 
 	if Configs.UpdateInterval != 60 {
 		t.Errorf("expected UpdateInterval=60, got %d", Configs.UpdateInterval)
+	}
+	if Configs.PollingEnabled != false {
+		t.Errorf("expected PollingEnabled=false, got %v", Configs.PollingEnabled)
 	}
 	if Configs.ReposPath != "/custom/repos" {
 		t.Errorf("expected ReposPath='/custom/repos', got %q", Configs.ReposPath)
